@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>FATURA</title>
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* CSS Reset & General Styles */
+        body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+        table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+        img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+        table { border-collapse: collapse !important; }
+        body { height: 100% !important; margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #f5f5f5; }
+        body, p, a, li, td, blockquote { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        @media screen and (max-width: 600px) {
+            .email-container { width: 100% !important; max-width: 100% !important; }
+            .header-padding, .content-padding, .footer-padding { padding-left: 20px !important; padding-right: 20px !important; }
+            .invoice-details-table td { display: block !important; width: 100% !important; padding-bottom: 20px !important; }
+            .invoice-details-table .detail-group { padding-bottom: 0 !important; }
+        }
+    </style>
+</head>
+<body style="margin: 0 !important; padding: 0 !important; background-color: #f5f5f5;">
+    <div style="display: none; font-size: 1px; color: #fefefe; line-height: 1px; font-family: 'Segoe UI', sans-serif; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden;">
+        Tray Sistemas - Sistema de Monitoramento Eletrônico
+    </div>
+
+    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+        <tr>
+            <td align="center" bgcolor="#f5f5f5">
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px;" class="email-container">
+                    <tr>
+                        <td align="center" valign="top" style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);" bgcolor="#1e3a8a">
+                             <div class="header-padding" style="padding: 30px;">
+                                 <div style="font-family: 'Segoe UI', sans-serif; font-size: 28px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; color: #ffffff; margin-bottom: 5px;">
+                                     Tray Sistemas
+                                 </div>
+                                 <div style="font-family: 'Segoe UI', sans-serif; font-size: 14px; color: #ffffff; opacity: 0.9;">
+                                     Sistemas de Segurança Eletrônica
+                                 </div>
+                             </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td bgcolor="#ffffff" style="padding: 0 30px;" class="content-padding">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td style="padding: 25px 0; border-left: 4px solid #3b82f6; background-color: #f8fafc; padding-left: 20px;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                            <tr>
+                                                <td style="font-family: 'Segoe UI', sans-serif; font-size: 24px; color: #1e3a8a; font-weight: 600; padding-bottom: 20px;">
+                                                    [Tipo de Lembrete]
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>
+                                                    <table border="0" cellpadding="0" cellspacing="0" width="100%" class="invoice-details-table">
+                                                        <tr>
+                                                            <td align="left" valign="top" class="detail-group" style="padding-bottom: 15px; width: 50%;">
+                                                                <p style="font-family: 'Segoe UI', sans-serif; font-weight: 600; color: #64748b; font-size: 12px; text-transform: uppercase; margin: 0 0 5px 0;">Cliente</p>
+                                                                <p style="font-family: 'Segoe UI', sans-serif; font-size: 16px; color: #1e293b; margin: 0;">[Nome do Cliente]</p>
+                                                            </td>
+                                                            <td align="left" valign="top" class="detail-group" style="padding-bottom: 15px; width: 50%;">
+                                                                <p style="font-family: 'Segoe UI', sans-serif; font-weight: 600; color: #64748b; font-size: 12px; text-transform: uppercase; margin: 0 0 5px 0;">Data de Vencimento</p>
+                                                                <p style="font-family: 'Segoe UI', sans-serif; font-size: 16px; color: #1e293b; margin: 0;">[Data de Vencimento do Boleto]</p>
+                                                            </td>
+                                                        </tr>
+                                                        <tr>
+                                                             <td align="left" valign="top" class="detail-group" colspan="2" style="padding-bottom: 15px;">
+                                                                <p style="font-family: 'Segoe UI', sans-serif; font-weight: 600; color: #64748b; font-size: 12px; text-transform: uppercase; margin: 0 0 5px 0;">Valor do Boleto</p>
+                                                                <p style="font-family: 'Segoe UI', sans-serif; font-size: 16px; color: #1e293b; margin: 0;">[Valor do Boleto]</p>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td bgcolor="#ffffff" class="content-padding" style="padding: 0 30px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr><td align="center" style="padding: 30px 0 10px 0;">[MAIN_CONTENT_BLOCK]</td></tr>
+                                <tr><td align="center" style="padding: 0 0 30px 0;">[ATTENTION_BLOCK]</td></tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td bgcolor="#f8fafc" style="border-top: 1px solid #e2e8f0; padding: 30px;" class="content-padding">
+                             <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                 <tr>
+                                     <td align="center" style="color: #1e3a8a; font-family: 'Segoe UI', sans-serif; font-size: 18px; font-weight: 600; padding-bottom: 20px;">Precisa de Ajuda?</td>
+                                 </tr>
+                                 <tr>
+                                     <td align="center">
+                                         <table border="0" cellspacing="0" cellpadding="0">
+                                             <tr><td align="center" style="border-radius: 30px;" bgcolor="#25d366"><a href="https://wa.me/554531323952" target="_blank" style="font-size: 16px; font-family: 'Segoe UI', sans-serif; color: #ffffff; text-decoration: none; border-radius: 30px; padding: 15px 25px; display: inline-block;">WhatsApp: (45) 3132-3952</a></td></tr>
+                                         </table>
+                                     </td>
+                                 </tr>
+                             </table>
+                        </td>
+                    </tr>
+                    <tr>
+                         <td bgcolor="#1e293b" style="padding: 25px;" class="footer-padding">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center" style="font-family: 'Segoe UI', sans-serif; font-size: 14px; color: #94a3b8;">
+                                        <p style="margin: 0; color: #ffffff; font-weight: 600; margin-bottom: 5px;">Tray Sistemas</p>
+                                        <p style="margin: 0; color: #ffffff; font-size: 12px;">Sistemas de Segurança Eletrônica</p>
+                                        <p style="margin: 15px 0 0 0; font-size: 12px; color: #94a3b8;">Este é um e-mail automático, não responda esta mensagem.</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
