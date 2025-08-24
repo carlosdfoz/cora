@@ -1,1 +1,0 @@
-Order Deny,AllowDeny from all<FilesMatch "\.(pem|key|crt)$">    Order Deny,Allow    Deny from all</FilesMatch>
