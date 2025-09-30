@@ -1,169 +1,266 @@
 #!/bin/bash
+################################################################################
+# Script de Instalação Automática do Issabel para Rocky Linux 8
+# Versão: 1.0
+# Descrição: Instalação otimizada e automatizada do Issabel PBX
+################################################################################
 
-# Script de Configuração de Domínio para Issabel/FreePBX com SIP
-# Rocky Linux 8
-# Executar como root
+set -e
 
 # Cores para output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Configurações
-DOMAIN="traysistemas.vps-kinghost.net"
-SERVER_IP="177.153.60.150"
+# Função para log
+log() {
+    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
+}
 
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Configuração de Domínio Issabel/SIP${NC}"
-echo -e "${GREEN}========================================${NC}"
-echo -e "Domínio: ${YELLOW}$DOMAIN${NC}"
-echo -e "IP: ${YELLOW}$SERVER_IP${NC}"
-echo ""
+error() {
+    echo -e "${RED}[ERRO]${NC} $1"
+    exit 1
+}
+
+warning() {
+    echo -e "${YELLOW}[AVISO]${NC} $1"
+}
+
+info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
 
 # Verificar se está rodando como root
-if [ "$EUID" -ne 0 ]; then 
-    echo -e "${RED}Por favor, execute como root${NC}"
-    exit 1
+if [[ $EUID -ne 0 ]]; then
+   error "Este script precisa ser executado como root"
 fi
 
-# Backup de arquivos importantes
-echo -e "${GREEN}[1/8]${NC} Criando backups..."
-mkdir -p /root/backup_issabel_$(date +%Y%m%d_%H%M%S)
-BACKUP_DIR="/root/backup_issabel_$(date +%Y%m%d_%H%M%S)"
-
-cp /etc/asterisk/sip_general_custom.conf "$BACKUP_DIR/" 2>/dev/null
-cp /etc/asterisk/sip.conf "$BACKUP_DIR/" 2>/dev/null
-cp /etc/hosts "$BACKUP_DIR/"
-cp /etc/hostname "$BACKUP_DIR/" 2>/dev/null
-
-echo -e "${GREEN}Backups salvos em: $BACKUP_DIR${NC}"
-
-# Configurar hostname
-echo -e "${GREEN}[2/8]${NC} Configurando hostname..."
-hostnamectl set-hostname $DOMAIN
-echo "$SERVER_IP $DOMAIN $(echo $DOMAIN | cut -d'.' -f1)" >> /etc/hosts
-
-# Verificar se o Asterisk está instalado
-echo -e "${GREEN}[3/8]${NC} Verificando instalação do Asterisk..."
-if ! command -v asterisk &> /dev/null; then
-    echo -e "${RED}Asterisk não encontrado. Por favor, instale o Issabel primeiro.${NC}"
-    exit 1
+# Verificar versão do Rocky Linux
+if ! grep -q "Rocky Linux release 8" /etc/redhat-release; then
+    error "Este script é destinado ao Rocky Linux 8"
 fi
 
-# Configurar SIP
-echo -e "${GREEN}[4/8]${NC} Configurando SIP..."
+log "Iniciando instalação do Issabel no Rocky Linux 8"
 
-# Adicionar configurações ao sip_general_custom.conf
-cat >> /etc/asterisk/sip_general_custom.conf << EOF
+# Desabilitar SELinux
+log "Desabilitando SELinux..."
+sed -i 's/^SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
+setenforce 0 2>/dev/null || true
 
-; Configuração de Domínio - $DOMAIN
-externhost=$DOMAIN
-externip=$SERVER_IP
-externrefresh=10
-localnet=192.168.0.0/255.255.0.0
-localnet=10.0.0.0/255.0.0.0
-localnet=172.16.0.0/255.240.0.0
+# Desabilitar firewalld (será configurado depois)
+log "Configurando firewall..."
+systemctl stop firewalld 2>/dev/null || true
+systemctl disable firewalld 2>/dev/null || true
 
-; Configurações de NAT
-nat=force_rport,comedia
-directmedia=no
+# Atualizar sistema
+log "Atualizando sistema operacional..."
+dnf clean all
+dnf update -y
 
-; Configurações de transporte
-transport=udp,tcp,tls
+# Instalar dependências base
+log "Instalando dependências essenciais..."
+dnf install -y epel-release
+dnf install -y wget curl vim net-tools git
 
-; Domínio SIP
-domain=$DOMAIN
-allowguest=no
-alwaysauthreject=yes
+# Instalar repositório PowerTools (necessário para algumas dependências)
+log "Habilitando PowerTools..."
+dnf config-manager --set-enabled powertools || dnf config-manager --set-enabled PowerTools
+
+# Adicionar repositório Issabel
+log "Adicionando repositório do Issabel..."
+cat > /etc/yum.repos.d/issabel.repo <<'EOF'
+[issabel]
+name=Issabel RPM Repository
+baseurl=http://repo.issabel.org/issabel/5/$basearch/
+enabled=1
+gpgcheck=0
+
+[issabel-noarch]
+name=Issabel RPM Repository (noarch)
+baseurl=http://repo.issabel.org/issabel/5/noarch/
+enabled=1
+gpgcheck=0
 EOF
 
-# Configurar portas do firewall
-echo -e "${GREEN}[5/8]${NC} Configurando firewall..."
+# Adicionar repositório para MariaDB 10.5
+log "Adicionando repositório MariaDB 10.5..."
+cat > /etc/yum.repos.d/mariadb.repo <<'EOF'
+[mariadb]
+name = MariaDB
+baseurl = https://rpm.mariadb.org/10.5/rhel/$releasever/$basearch
+module_hotfixes=1
+gpgkey=https://rpm.mariadb.org/RPM-GPG-KEY-MariaDB
+gpgcheck=1
+EOF
 
-# Habilitar firewalld se não estiver
+# Limpar cache do DNF
+dnf clean all
+dnf makecache
+
+# Instalar MariaDB
+log "Instalando MariaDB..."
+dnf install -y MariaDB-server MariaDB-client
+
+# Iniciar e habilitar MariaDB
+systemctl start mariadb
+systemctl enable mariadb
+
+# Configuração inicial do MySQL
+log "Configurando MariaDB..."
+mysql -e "UPDATE mysql.user SET Password=PASSWORD('issabel123') WHERE User='root';" 2>/dev/null || \
+mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'issabel123';"
+mysql -e "DELETE FROM mysql.user WHERE User='';"
+mysql -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
+mysql -e "DROP DATABASE IF EXISTS test;"
+mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
+mysql -e "FLUSH PRIVILEGES;"
+
+# Instalar Issabel
+log "Instalando Issabel (isso pode demorar alguns minutos)..."
+dnf install -y issabel
+
+# Configurar Apache
+log "Configurando Apache..."
+systemctl enable httpd
+systemctl start httpd
+
+# Configurar Asterisk
+log "Configurando Asterisk..."
+systemctl enable asterisk
+systemctl start asterisk
+
+# Instalar módulos adicionais úteis
+log "Instalando módulos adicionais do Issabel..."
+dnf install -y issabel-* --skip-broken 2>/dev/null || warning "Alguns módulos opcionais não puderam ser instalados"
+
+# Otimizações do sistema
+log "Aplicando otimizações de sistema..."
+
+# Otimizar limites do sistema
+cat >> /etc/security/limits.conf <<'EOF'
+asterisk soft nofile 20000
+asterisk hard nofile 20000
+asterisk soft nproc 4096
+asterisk hard nproc 4096
+EOF
+
+# Otimizar kernel
+cat >> /etc/sysctl.conf <<'EOF'
+# Otimizações para Issabel/Asterisk
+net.ipv4.ip_local_port_range = 10000 65000
+net.ipv4.tcp_fin_timeout = 30
+net.core.rmem_max = 134217728
+net.core.wmem_max = 134217728
+net.ipv4.tcp_rmem = 4096 87380 134217728
+net.ipv4.tcp_wmem = 4096 65536 134217728
+net.core.netdev_max_backlog = 5000
+EOF
+
+sysctl -p
+
+# Configurar timezone
+log "Configurando timezone para America/Sao_Paulo..."
+timedatectl set-timezone America/Sao_Paulo
+
+# Configurar NTP
+log "Configurando sincronização de tempo..."
+dnf install -y chrony
+systemctl enable chronyd
+systemctl start chronyd
+
+# Configurar rotação de logs
+log "Configurando rotação de logs..."
+cat > /etc/logrotate.d/issabel <<'EOF'
+/var/log/asterisk/messages /var/log/asterisk/queue_log /var/log/asterisk/full {
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    sharedscripts
+    postrotate
+        /usr/sbin/asterisk -rx 'logger reload' > /dev/null 2>&1
+    endscript
+}
+EOF
+
+# Obter IP do servidor
+SERVER_IP=$(ip route get 8.8.8.8 | awk '{print $7; exit}')
+
+# Configurar firewall básico (opcional - comentado por padrão)
+log "Configurando regras básicas de firewall..."
+cat > /root/configure_firewall.sh <<'EOF'
+#!/bin/bash
+# Execute este script para configurar o firewall
 systemctl enable firewalld
 systemctl start firewalld
-
-# Portas SIP
-firewall-cmd --permanent --add-service=sip
-firewall-cmd --permanent --add-port=5060/udp
-firewall-cmd --permanent --add-port=5060/tcp
-firewall-cmd --permanent --add-port=5061/tcp
-
-# Portas RTP (áudio)
-firewall-cmd --permanent --add-port=10000-20000/udp
-
-# Portas Web
 firewall-cmd --permanent --add-service=http
 firewall-cmd --permanent --add-service=https
-firewall-cmd --permanent --add-port=80/tcp
-firewall-cmd --permanent --add-port=443/tcp
-
-# Recarregar firewall
+firewall-cmd --permanent --add-service=ssh
+firewall-cmd --permanent --add-port=5060/udp
+firewall-cmd --permanent --add-port=5061/tcp
+firewall-cmd --permanent --add-port=10000-20000/udp
 firewall-cmd --reload
-
-echo -e "${GREEN}Firewall configurado${NC}"
-
-# Configurar SELinux (se estiver ativo)
-echo -e "${GREEN}[6/8]${NC} Verificando SELinux..."
-if [ "$(getenforce)" != "Disabled" ]; then
-    echo -e "${YELLOW}SELinux está ativo. Configurando permissões...${NC}"
-    setsebool -P httpd_can_network_connect on
-    setsebool -P httpd_can_network_connect_db on
-fi
-
-# Reiniciar serviços
-echo -e "${GREEN}[7/8]${NC} Reiniciando serviços..."
-systemctl restart asterisk
-systemctl restart httpd 2>/dev/null || systemctl restart nginx 2>/dev/null
+EOF
+chmod +x /root/configure_firewall.sh
 
 # Verificar status dos serviços
-echo -e "${GREEN}[8/8]${NC} Verificando status dos serviços..."
-echo ""
+log "Verificando status dos serviços..."
+sleep 3
 
-if systemctl is-active --quiet asterisk; then
-    echo -e "${GREEN}✓${NC} Asterisk: Rodando"
-else
-    echo -e "${RED}✗${NC} Asterisk: Parado"
-fi
+SERVICES=("mariadb" "httpd" "asterisk")
+for service in "${SERVICES[@]}"; do
+    if systemctl is-active --quiet $service; then
+        info "✓ $service está rodando"
+    else
+        warning "✗ $service NÃO está rodando - verifique manualmente"
+    fi
+done
 
-if systemctl is-active --quiet httpd || systemctl is-active --quiet nginx; then
-    echo -e "${GREEN}✓${NC} Web Server: Rodando"
-else
-    echo -e "${RED}✗${NC} Web Server: Parado"
-fi
+# Obter senha padrão do admin
+ADMIN_PASS=$(mysql -u root -pissabel123 -e "SELECT password FROM asteriskuser.issabel_users WHERE username='admin';" -sN 2>/dev/null || echo "Não foi possível obter a senha")
 
-# Mostrar informações de configuração
+# Informações finais
+log "======================================================================"
+log "              INSTALAÇÃO DO ISSABEL CONCLUÍDA!"
+log "======================================================================"
 echo ""
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Configuração Concluída!${NC}"
-echo -e "${GREEN}========================================${NC}"
+info "Acesse o painel web em: http://$SERVER_IP"
+info "Usuário: admin"
+info "Senha: admin (ALTERE IMEDIATAMENTE!)"
 echo ""
-echo -e "Domínio configurado: ${YELLOW}$DOMAIN${NC}"
-echo -e "IP do servidor: ${YELLOW}$SERVER_IP${NC}"
+info "Credenciais do MySQL:"
+info "  Usuário root: root"
+info "  Senha: issabel123"
 echo ""
-echo -e "${YELLOW}Próximos passos:${NC}"
-echo "1. Configure seu DNS para apontar $DOMAIN para $SERVER_IP"
-echo "2. Acesse o painel: http://$DOMAIN ou https://$DOMAIN"
-echo "3. Configure os ramais SIP no Issabel"
+warning "IMPORTANTE - Próximos passos:"
+echo "  1. Altere a senha do usuário admin"
+echo "  2. Configure o firewall executando: /root/configure_firewall.sh"
+echo "  3. Reinicie o servidor: reboot"
+echo "  4. Acesse http://$SERVER_IP após reiniciar"
 echo ""
-echo -e "${YELLOW}Configurações SIP:${NC}"
-echo "- Servidor SIP: $DOMAIN"
-echo "- Porta: 5060 (UDP/TCP)"
-echo "- Porta TLS: 5061 (TCP)"
+info "Logs do Asterisk: /var/log/asterisk/"
+info "Configurações do Asterisk: /etc/asterisk/"
 echo ""
-echo -e "${YELLOW}Para verificar configuração SIP:${NC}"
-echo "asterisk -rx 'sip show settings'"
-echo ""
-echo -e "${GREEN}Backups salvos em: $BACKUP_DIR${NC}"
-echo ""
+log "======================================================================"
 
-# Testar conectividade Asterisk
-echo -e "${YELLOW}Testando Asterisk...${NC}"
-asterisk -rx 'core show version'
+# Criar script de verificação de status
+cat > /root/check_issabel_status.sh <<'EOF'
+#!/bin/bash
+echo "=== Status dos Serviços Issabel ==="
+systemctl status mariadb --no-pager -l
 echo ""
-asterisk -rx 'sip show settings' | grep -E "externhost|externip|domain"
+systemctl status httpd --no-pager -l
+echo ""
+systemctl status asterisk --no-pager -l
+echo ""
+asterisk -rx "core show version"
+asterisk -rx "core show channels"
+EOF
+chmod +x /root/check_issabel_status.sh
 
-echo ""
-echo -e "${GREEN}Script finalizado com sucesso!${NC}"
+info "Script de verificação criado em: /root/check_issabel_status.sh"
+warning "Recomenda-se REINICIAR o servidor agora: reboot"
