@@ -1,9 +1,10 @@
 #!/bin/bash
-################################################################################
-# Script de Instalação Automática do Issabel para Rocky Linux 8
-# Versão: 1.0
-# Descrição: Instalação otimizada e automatizada do Issabel PBX
-################################################################################
+#############################################################################
+# Script de Instalação Automatizada Issabel - AlmaLinux 8
+# Otimizado com Asterisk 20 e Configurações de Segurança
+# Autor: Script Automatizado
+# Data: 2025
+#############################################################################
 
 set -e
 
@@ -11,10 +12,9 @@ set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Função para log
+# Função de log
 log() {
     echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
 }
@@ -28,239 +28,512 @@ warning() {
     echo -e "${YELLOW}[AVISO]${NC} $1"
 }
 
-info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-# Verificar se está rodando como root
-if [[ $EUID -ne 0 ]]; then
-   error "Este script precisa ser executado como root"
+# Verificar se é root
+if [ "$EUID" -ne 0 ]; then 
+    error "Este script precisa ser executado como root"
 fi
 
-# Verificar versão do Rocky Linux
-if ! grep -q "Rocky Linux release 8" /etc/redhat-release; then
-    error "Este script é destinado ao Rocky Linux 8"
+# Verificar se é AlmaLinux 8
+if ! grep -q "AlmaLinux release 8" /etc/redhat-release 2>/dev/null; then
+    error "Este script é específico para AlmaLinux 8"
 fi
 
-log "Iniciando instalação do Issabel no Rocky Linux 8"
+log "Iniciando instalação otimizada do Issabel..."
 
-# Desabilitar SELinux
-log "Desabilitando SELinux..."
-sed -i 's/^SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
-setenforce 0 2>/dev/null || true
+#############################################################################
+# 1. PREPARAÇÃO DO SISTEMA
+#############################################################################
 
-# Desabilitar firewalld (será configurado depois)
-log "Configurando firewall..."
-systemctl stop firewalld 2>/dev/null || true
-systemctl disable firewalld 2>/dev/null || true
-
-# Atualizar sistema
-log "Atualizando sistema operacional..."
+log "Atualizando sistema..."
 dnf clean all
 dnf update -y
 
-# Instalar dependências base
-log "Instalando dependências essenciais..."
+log "Desabilitando SELinux..."
+sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
+setenforce 0 2>/dev/null || true
+
+log "Instalando pacotes essenciais..."
 dnf install -y epel-release
-dnf install -y wget curl vim net-tools git
+dnf install -y wget curl vim net-tools git htop iotop iftop \
+    screen tmux bind-utils telnet nc unzip bzip2
 
-# Instalar repositório PowerTools (necessário para algumas dependências)
-log "Habilitando PowerTools..."
-dnf config-manager --set-enabled powertools || dnf config-manager --set-enabled PowerTools
+#############################################################################
+# 2. OTIMIZAÇÕES DO SISTEMA
+#############################################################################
 
-# Adicionar repositório Issabel
-log "Adicionando repositório do Issabel..."
-cat > /etc/yum.repos.d/issabel.repo <<'EOF'
+log "Aplicando otimizações do kernel..."
+
+cat > /etc/sysctl.d/99-issabel-optimization.conf << 'EOF'
+# Otimizações de Rede
+net.ipv4.ip_forward = 1
+net.ipv4.conf.all.rp_filter = 0
+net.ipv4.conf.default.rp_filter = 0
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.core.rmem_default = 262144
+net.core.wmem_default = 262144
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+net.core.netdev_max_backlog = 5000
+net.ipv4.tcp_no_metrics_save = 1
+net.ipv4.tcp_moderate_rcvbuf = 1
+
+# Otimizações de Desempenho
+fs.file-max = 2097152
+net.ipv4.ip_local_port_range = 1024 65535
+net.ipv4.tcp_fin_timeout = 15
+net.ipv4.tcp_keepalive_time = 300
+net.ipv4.tcp_tw_reuse = 1
+net.core.somaxconn = 4096
+
+# Segurança
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv4.conf.default.accept_source_route = 0
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv4.conf.default.accept_redirects = 0
+net.ipv4.conf.all.secure_redirects = 0
+net.ipv4.conf.default.secure_redirects = 0
+net.ipv4.conf.all.send_redirects = 0
+net.ipv4.conf.default.send_redirects = 0
+net.ipv4.icmp_echo_ignore_broadcasts = 1
+net.ipv4.icmp_ignore_bogus_error_responses = 1
+EOF
+
+sysctl -p /etc/sysctl.d/99-issabel-optimization.conf
+
+log "Configurando limites do sistema..."
+cat > /etc/security/limits.d/99-issabel.conf << 'EOF'
+*               soft    nofile          65535
+*               hard    nofile          65535
+*               soft    nproc           32768
+*               hard    nproc           32768
+asterisk        soft    nofile          65535
+asterisk        hard    nofile          65535
+asterisk        soft    nproc           32768
+asterisk        hard    nproc           32768
+EOF
+
+#############################################################################
+# 3. CONFIGURAÇÃO DO FIREWALL
+#############################################################################
+
+log "Configurando firewall otimizado..."
+
+systemctl enable firewalld
+systemctl start firewalld
+
+# Portas essenciais Issabel/Asterisk
+firewall-cmd --permanent --add-port=80/tcp      # HTTP
+firewall-cmd --permanent --add-port=443/tcp     # HTTPS
+firewall-cmd --permanent --add-port=5060/tcp    # SIP TCP
+firewall-cmd --permanent --add-port=5060/udp    # SIP UDP
+firewall-cmd --permanent --add-port=5061/tcp    # SIP TLS
+firewall-cmd --permanent --add-port=4569/udp    # IAX2
+firewall-cmd --permanent --add-port=10000-20000/udp  # RTP
+
+# Portas adicionais
+firewall-cmd --permanent --add-port=3306/tcp    # MySQL (apenas localhost recomendado)
+firewall-cmd --permanent --add-port=5038/tcp    # AMI (Manager Interface)
+firewall-cmd --permanent --add-port=8088/tcp    # Asterisk HTTP
+firewall-cmd --permanent --add-port=8089/tcp    # Asterisk HTTPS
+
+# Serviços
+firewall-cmd --permanent --add-service=ssh
+firewall-cmd --permanent --add-service=http
+firewall-cmd --permanent --add-service=https
+
+# Proteção contra flood SIP
+firewall-cmd --permanent --add-rich-rule='rule port port=5060 protocol=udp limit value=100/s accept'
+
+firewall-cmd --reload
+
+log "Configurando fail2ban para proteção adicional..."
+dnf install -y fail2ban fail2ban-systemd
+
+cat > /etc/fail2ban/jail.local << 'EOF'
+[DEFAULT]
+bantime = 3600
+findtime = 600
+maxretry = 5
+backend = systemd
+
+[sshd]
+enabled = true
+port = ssh
+logpath = %(sshd_log)s
+
+[asterisk]
+enabled = true
+port = 5060,5061
+logpath = /var/log/asterisk/full
+maxretry = 10
+
+[asterisk-iptables]
+enabled = true
+filter = asterisk
+action = iptables-allports[name=ASTERISK]
+logpath = /var/log/asterisk/full
+maxretry = 5
+bantime = 86400
+EOF
+
+systemctl enable fail2ban
+systemctl start fail2ban
+
+#############################################################################
+# 4. INSTALAÇÃO DO ISSABEL
+#############################################################################
+
+log "Adicionando repositório Issabel..."
+cat > /etc/yum.repos.d/issabel.repo << 'EOF'
 [issabel]
-name=Issabel RPM Repository
-baseurl=http://repo.issabel.org/issabel/5/$basearch/
+name=Issabel RPMs
+baseurl=http://repo.issabel.org/issabel/8/
 enabled=1
 gpgcheck=0
-
-[issabel-noarch]
-name=Issabel RPM Repository (noarch)
-baseurl=http://repo.issabel.org/issabel/5/noarch/
-enabled=1
-gpgcheck=0
+priority=1
 EOF
 
-# Adicionar repositório para MariaDB 10.5
-log "Adicionando repositório MariaDB 10.5..."
-cat > /etc/yum.repos.d/mariadb.repo <<'EOF'
-[mariadb]
-name = MariaDB
-baseurl = https://rpm.mariadb.org/10.5/rhel/$releasever/$basearch
-module_hotfixes=1
-gpgkey=https://rpm.mariadb.org/RPM-GPG-KEY-MariaDB
-gpgcheck=1
-EOF
-
-# Limpar cache do DNF
-dnf clean all
-dnf makecache
-
-# Instalar MariaDB
-log "Instalando MariaDB..."
-dnf install -y MariaDB-server MariaDB-client
-
-# Iniciar e habilitar MariaDB
-systemctl start mariadb
-systemctl enable mariadb
-
-# Configuração inicial do MySQL
-log "Configurando MariaDB..."
-mysql -e "UPDATE mysql.user SET Password=PASSWORD('issabel123') WHERE User='root';" 2>/dev/null || \
-mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'issabel123';"
-mysql -e "DELETE FROM mysql.user WHERE User='';"
-mysql -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
-mysql -e "DROP DATABASE IF EXISTS test;"
-mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
-mysql -e "FLUSH PRIVILEGES;"
-
-# Instalar Issabel
-log "Instalando Issabel (isso pode demorar alguns minutos)..."
+log "Instalando Issabel (isso pode levar alguns minutos)..."
 dnf install -y issabel
 
-# Configurar Apache
-log "Configurando Apache..."
-systemctl enable httpd
-systemctl start httpd
+#############################################################################
+# 5. INSTALAÇÃO E CONFIGURAÇÃO DO ASTERISK 20
+#############################################################################
 
-# Configurar Asterisk
+log "Preparando para instalação do Asterisk 20..."
+
+# Remover Asterisk padrão se existir
+dnf remove -y asterisk\* || true
+
+# Instalar dependências do Asterisk 20
+dnf install -y gcc gcc-c++ make wget libxml2-devel ncurses-devel \
+    openssl-devel sqlite-devel libuuid-devel jansson-devel \
+    libedit-devel pjproject-devel libsrtp-devel speex-devel \
+    speexdsp-devel opus-devel
+
+# Download e instalação do Asterisk 20
+cd /usr/src
+ASTERISK_VERSION="20.10.1"
+log "Baixando Asterisk ${ASTERISK_VERSION}..."
+wget https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-${ASTERISK_VERSION}.tar.gz
+tar xzf asterisk-${ASTERISK_VERSION}.tar.gz
+cd asterisk-${ASTERISK_VERSION}
+
+log "Instalando pré-requisitos do Asterisk..."
+contrib/scripts/install_prereq install
+
 log "Configurando Asterisk..."
+./configure --with-jansson-bundled --with-pjproject-bundled
+
+log "Compilando Asterisk (isso pode levar 10-20 minutos)..."
+make menuselect.makeopts
+menuselect/menuselect --enable app_macro --enable res_snmp menuselect.makeopts
+make -j$(nproc)
+make install
+make samples
+make config
+
+# Criar usuário asterisk
+useradd -r -d /var/lib/asterisk -s /bin/bash asterisk 2>/dev/null || true
+
+# Permissões
+chown -R asterisk:asterisk /var/lib/asterisk
+chown -R asterisk:asterisk /var/spool/asterisk
+chown -R asterisk:asterisk /var/log/asterisk
+chown -R asterisk:asterisk /var/run/asterisk
+chown -R asterisk:asterisk /etc/asterisk
+
+#############################################################################
+# 6. OTIMIZAÇÕES DO ASTERISK
+#############################################################################
+
+log "Aplicando otimizações no Asterisk..."
+
+# Backup das configurações originais
+mkdir -p /root/asterisk-backup
+cp -r /etc/asterisk/* /root/asterisk-backup/
+
+# Configurações otimizadas do asterisk.conf
+cat > /etc/asterisk/asterisk.conf << 'EOF'
+[directories]
+astetcdir => /etc/asterisk
+astmoddir => /usr/lib/asterisk/modules
+astvarlibdir => /var/lib/asterisk
+astdbdir => /var/lib/asterisk
+astkeydir => /var/lib/asterisk
+astdatadir => /var/lib/asterisk
+astagidir => /var/lib/asterisk/agi-bin
+astspooldir => /var/spool/asterisk
+astrundir => /var/run/asterisk
+astlogdir => /var/log/asterisk
+
+[options]
+verbose = 3
+debug = 0
+alwaysfork = yes
+nofork = no
+quiet = no
+timestamp = yes
+execincludes = yes
+console = yes
+highpriority = yes
+initcrypto = yes
+nocolor = no
+dontwarn = no
+dumpcore = yes
+languageprefix = no
+internal_timing = yes
+systemname = issabel
+maxcalls = 1000
+maxload = 1.0
+maxfiles = 65535
+minmemfree = 128
+cache_record_files = yes
+record_cache_dir = /var/spool/asterisk/tmp
+transmit_silence = yes
+runuser = asterisk
+rungroup = asterisk
+EOF
+
+# Otimizar logger.conf
+cat > /etc/asterisk/logger.conf << 'EOF'
+[general]
+dateformat=%F %T
+
+[logfiles]
+console => notice,warning,error
+messages => notice,warning,error
+full => notice,warning,error,debug,verbose
+EOF
+
+# Otimizar rtp.conf
+cat > /etc/asterisk/rtp.conf << 'EOF'
+[general]
+rtpstart=10000
+rtpend=20000
+rtpchecksums=no
+dtmftimeout=3000
+rtcpinterval=5000
+strictrtp=yes
+icesupport=yes
+stunaddr=stun.l.google.com:19302
+EOF
+
+# Módulos otimizados
+cat > /etc/asterisk/modules.conf << 'EOF'
+[modules]
+autoload=yes
+
+noload => pbx_ael.so
+noload => pbx_dundi.so
+noload => chan_mgcp.so
+noload => chan_skinny.so
+noload => chan_unistim.so
+noload => chan_phone.so
+noload => chan_alsa.so
+noload => chan_console.so
+noload => chan_oss.so
+EOF
+
+#############################################################################
+# 7. CONFIGURAÇÃO DO MYSQL
+#############################################################################
+
+log "Otimizando MySQL/MariaDB..."
+
+systemctl enable mariadb
+systemctl start mariadb
+
+# Configurações otimizadas do MySQL
+cat > /etc/my.cnf.d/issabel-optimization.cnf << 'EOF'
+[mysqld]
+# Otimizações de Performance
+innodb_buffer_pool_size = 512M
+innodb_log_file_size = 128M
+innodb_flush_log_at_trx_commit = 2
+innodb_flush_method = O_DIRECT
+innodb_file_per_table = 1
+max_connections = 500
+thread_cache_size = 50
+table_open_cache = 2000
+query_cache_size = 64M
+query_cache_type = 1
+query_cache_limit = 2M
+tmp_table_size = 64M
+max_heap_table_size = 64M
+sort_buffer_size = 2M
+read_buffer_size = 1M
+read_rnd_buffer_size = 2M
+join_buffer_size = 2M
+key_buffer_size = 64M
+
+# Logs
+slow_query_log = 1
+slow_query_log_file = /var/log/mariadb/slow-query.log
+long_query_time = 2
+log_error = /var/log/mariadb/error.log
+
+# Segurança
+bind-address = 127.0.0.1
+local-infile = 0
+EOF
+
+systemctl restart mariadb
+
+#############################################################################
+# 8. CONFIGURAÇÃO DO APACHE
+#############################################################################
+
+log "Otimizando Apache..."
+
+cat > /etc/httpd/conf.d/mpm.conf << 'EOF'
+<IfModule mpm_prefork_module>
+    StartServers             8
+    MinSpareServers          5
+    MaxSpareServers         20
+    ServerLimit            256
+    MaxRequestWorkers      256
+    MaxConnectionsPerChild   4000
+</IfModule>
+EOF
+
+# Configurações de segurança
+cat >> /etc/httpd/conf.d/security.conf << 'EOF'
+ServerTokens Prod
+ServerSignature Off
+TraceEnable Off
+Header always set X-Frame-Options "SAMEORIGIN"
+Header always set X-Content-Type-Options "nosniff"
+Header always set X-XSS-Protection "1; mode=block"
+EOF
+
+systemctl enable httpd
+systemctl restart httpd
+
+#############################################################################
+# 9. SCRIPTS DE MANUTENÇÃO
+#############################################################################
+
+log "Criando scripts de manutenção..."
+
+cat > /usr/local/bin/issabel-backup.sh << 'EOF'
+#!/bin/bash
+BACKUP_DIR="/var/backups/issabel"
+DATE=$(date +%Y%m%d_%H%M%S)
+mkdir -p $BACKUP_DIR
+
+# Backup configurações Asterisk
+tar czf $BACKUP_DIR/asterisk-$DATE.tar.gz /etc/asterisk/
+
+# Backup MySQL
+mysqldump --all-databases | gzip > $BACKUP_DIR/mysql-$DATE.sql.gz
+
+# Backup Issabel
+tar czf $BACKUP_DIR/issabel-$DATE.tar.gz /var/www/html/ /etc/httpd/
+
+# Limpar backups antigos (manter últimos 7 dias)
+find $BACKUP_DIR -type f -mtime +7 -delete
+
+echo "Backup concluído: $BACKUP_DIR"
+EOF
+
+chmod +x /usr/local/bin/issabel-backup.sh
+
+# Criar cron para backup diário
+echo "0 2 * * * root /usr/local/bin/issabel-backup.sh" > /etc/cron.d/issabel-backup
+
+#############################################################################
+# 10. FINALIZAÇÃO
+#############################################################################
+
+log "Iniciando serviços..."
 systemctl enable asterisk
 systemctl start asterisk
 
-# Instalar módulos adicionais úteis
-log "Instalando módulos adicionais do Issabel..."
-dnf install -y issabel-* --skip-broken 2>/dev/null || warning "Alguns módulos opcionais não puderam ser instalados"
+log "Criando informações do sistema..."
+cat > /root/ISSABEL_INFO.txt << EOF
+=================================================================
+INSTALAÇÃO ISSABEL - ALMALINUX 8 - CONCLUÍDA
+=================================================================
+Data: $(date)
+Hostname: $(hostname)
+IP: $(hostname -I | awk '{print $1}')
 
-# Otimizações do sistema
-log "Aplicando otimizações de sistema..."
+INFORMAÇÕES DE ACESSO:
+=================================================================
+Interface Web: https://$(hostname -I | awk '{print $1}')
+Usuário padrão: admin
+Senha: Defina na primeira configuração
 
-# Otimizar limites do sistema
-cat >> /etc/security/limits.conf <<'EOF'
-asterisk soft nofile 20000
-asterisk hard nofile 20000
-asterisk soft nproc 4096
-asterisk hard nproc 4096
+PORTAS CONFIGURADAS NO FIREWALL:
+=================================================================
+- HTTP: 80
+- HTTPS: 443
+- SIP: 5060 (TCP/UDP), 5061 (TLS)
+- RTP: 10000-20000 (UDP)
+- IAX2: 4569 (UDP)
+- AMI: 5038 (TCP)
+
+VERSÕES INSTALADAS:
+=================================================================
+- AlmaLinux: $(cat /etc/redhat-release)
+- Asterisk: $(asterisk -V)
+- PHP: $(php -v | head -n1)
+- MariaDB: $(mysql --version)
+
+COMANDOS ÚTEIS:
+=================================================================
+- Status Asterisk: asterisk -rx "core show version"
+- Console Asterisk: asterisk -rvvv
+- Backup manual: /usr/local/bin/issabel-backup.sh
+- Ver canais: asterisk -rx "core show channels"
+- Recarregar dialplan: asterisk -rx "dialplan reload"
+- Status firewall: firewall-cmd --list-all
+- Logs Asterisk: tail -f /var/log/asterisk/full
+
+PRÓXIMOS PASSOS:
+=================================================================
+1. Acesse a interface web e complete a configuração inicial
+2. Configure o Mysql: mysql_secure_installation
+3. Altere senhas padrão
+4. Configure trunks e extensões
+5. Teste conectividade SIP
+
+BACKUPS:
+=================================================================
+- Localização: /var/backups/issabel
+- Agendamento: Diariamente às 02:00
+- Retenção: 7 dias
+
+SEGURANÇA:
+=================================================================
+- Firewall: Ativo e configurado
+- Fail2ban: Ativo
+- SELinux: Desabilitado
+- MySQL: Configurado para localhost apenas
+
+SUPORTE:
+=================================================================
+- Documentação Issabel: https://issabel.org/documentation
+- Documentação Asterisk: https://wiki.asterisk.org
+- Logs do sistema: /var/log/
+
+=================================================================
 EOF
 
-# Otimizar kernel
-cat >> /etc/sysctl.conf <<'EOF'
-# Otimizações para Issabel/Asterisk
-net.ipv4.ip_local_port_range = 10000 65000
-net.ipv4.tcp_fin_timeout = 30
-net.core.rmem_max = 134217728
-net.core.wmem_max = 134217728
-net.ipv4.tcp_rmem = 4096 87380 134217728
-net.ipv4.tcp_wmem = 4096 65536 134217728
-net.core.netdev_max_backlog = 5000
-EOF
+cat /root/ISSABEL_INFO.txt
 
-sysctl -p
-
-# Configurar timezone
-log "Configurando timezone para America/Sao_Paulo..."
-timedatectl set-timezone America/Sao_Paulo
-
-# Configurar NTP
-log "Configurando sincronização de tempo..."
-dnf install -y chrony
-systemctl enable chronyd
-systemctl start chronyd
-
-# Configurar rotação de logs
-log "Configurando rotação de logs..."
-cat > /etc/logrotate.d/issabel <<'EOF'
-/var/log/asterisk/messages /var/log/asterisk/queue_log /var/log/asterisk/full {
-    daily
-    rotate 7
-    missingok
-    notifempty
-    compress
-    delaycompress
-    sharedscripts
-    postrotate
-        /usr/sbin/asterisk -rx 'logger reload' > /dev/null 2>&1
-    endscript
-}
-EOF
-
-# Obter IP do servidor
-SERVER_IP=$(ip route get 8.8.8.8 | awk '{print $7; exit}')
-
-# Configurar firewall básico (opcional - comentado por padrão)
-log "Configurando regras básicas de firewall..."
-cat > /root/configure_firewall.sh <<'EOF'
-#!/bin/bash
-# Execute este script para configurar o firewall
-systemctl enable firewalld
-systemctl start firewalld
-firewall-cmd --permanent --add-service=http
-firewall-cmd --permanent --add-service=https
-firewall-cmd --permanent --add-service=ssh
-firewall-cmd --permanent --add-port=5060/udp
-firewall-cmd --permanent --add-port=5061/tcp
-firewall-cmd --permanent --add-port=10000-20000/udp
-firewall-cmd --reload
-EOF
-chmod +x /root/configure_firewall.sh
-
-# Verificar status dos serviços
-log "Verificando status dos serviços..."
-sleep 3
-
-SERVICES=("mariadb" "httpd" "asterisk")
-for service in "${SERVICES[@]}"; do
-    if systemctl is-active --quiet $service; then
-        info "✓ $service está rodando"
-    else
-        warning "✗ $service NÃO está rodando - verifique manualmente"
-    fi
-done
-
-# Obter senha padrão do admin
-ADMIN_PASS=$(mysql -u root -pissabel123 -e "SELECT password FROM asteriskuser.issabel_users WHERE username='admin';" -sN 2>/dev/null || echo "Não foi possível obter a senha")
-
-# Informações finais
-log "======================================================================"
-log "              INSTALAÇÃO DO ISSABEL CONCLUÍDA!"
-log "======================================================================"
-echo ""
-info "Acesse o painel web em: http://$SERVER_IP"
-info "Usuário: admin"
-info "Senha: admin (ALTERE IMEDIATAMENTE!)"
-echo ""
-info "Credenciais do MySQL:"
-info "  Usuário root: root"
-info "  Senha: issabel123"
-echo ""
-warning "IMPORTANTE - Próximos passos:"
-echo "  1. Altere a senha do usuário admin"
-echo "  2. Configure o firewall executando: /root/configure_firewall.sh"
-echo "  3. Reinicie o servidor: reboot"
-echo "  4. Acesse http://$SERVER_IP após reiniciar"
-echo ""
-info "Logs do Asterisk: /var/log/asterisk/"
-info "Configurações do Asterisk: /etc/asterisk/"
-echo ""
-log "======================================================================"
-
-# Criar script de verificação de status
-cat > /root/check_issabel_status.sh <<'EOF'
-#!/bin/bash
-echo "=== Status dos Serviços Issabel ==="
-systemctl status mariadb --no-pager -l
-echo ""
-systemctl status httpd --no-pager -l
-echo ""
-systemctl status asterisk --no-pager -l
-echo ""
-asterisk -rx "core show version"
-asterisk -rx "core show channels"
-EOF
-chmod +x /root/check_issabel_status.sh
-
-info "Script de verificação criado em: /root/check_issabel_status.sh"
-warning "Recomenda-se REINICIAR o servidor agora: reboot"
+log "========================================="
+log "INSTALAÇÃO CONCLUÍDA COM SUCESSO!"
+log "========================================="
+log ""
+log "Acesse: https://$(hostname -I | awk '{print $1}')"
+log ""
+log "Informações detalhadas salvas em: /root/ISSABEL_INFO.txt"
+log ""
+warning "IMPORTANTE: Execute 'mysql_secure_installation' para proteger o MySQL"
+warning "IMPORTANTE: Reinicie o servidor para aplicar todas as otimizações"
+log ""
+log "Para reiniciar agora: reboot"
+log "========================================="
